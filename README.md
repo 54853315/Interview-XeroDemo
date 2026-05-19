@@ -61,6 +61,21 @@ xerodemo web --port 5000
 5. **仪表板**：显示用户信息、Xero 连接状态
 6. **登出**：导航栏和仪表板均有登出按钮，登出时清理 OAuth token
 
+### Docker 运行
+
+1. 配置环境变量（确保 `.env` 文件存在，同上）
+
+2. 构建并启动
+
+```bash
+docker compose up --build
+```
+
+3. 打开 `http://localhost:5000`
+
+停止服务：`docker compose down`
+停止并清除数据：`docker compose down -v`
+
 ### API 文档
 
 接口文档使用 OpenAPI 3.0 规范，位于 [`docs/openapi.yaml`](docs/openapi.yaml)。

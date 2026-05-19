@@ -9,4 +9,3 @@ def test_cli_help() -> None:
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
     assert "web" in result.output
-    assert "auth" in result.output

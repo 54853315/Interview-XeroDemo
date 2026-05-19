@@ -15,38 +15,4 @@ block content %}
   </div>
 </div>
 
-<h3 style="margin: 30px 0 15px">Your Workspaces</h3>
-
-{% if workspaces %}
-<div style="display: grid; gap: 15px">
-  {% for workspace in workspaces %}
-  <div
-    style="
-      background: white;
-      padding: 15px;
-      border-radius: 4px;
-      border-left: 4px solid #1e88e5;
-    "
-  >
-    <strong>{{ workspace.name }}</strong>
-    {% if workspace.trial_account %}
-    <span
-      style="
-        background: #fff3cd;
-        padding: 2px 8px;
-        border-radius: 3px;
-        margin-left: 10px;
-        font-size: 12px;
-      "
-      >Trial</span
-    >
-    {% endif %}
-    <p style="color: #666; margin-top: 5px; font-size: 14px">
-      Created: {{ workspace.created_at.strftime('%Y-%m-%d') }}
-    </p>
-  </div>
-  {% endfor %}
-</div>
-{% else %}
-<p style="color: #999">No workspaces yet.</p>
-{% endif %} {% endblock %}
+{% endblock %}

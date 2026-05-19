@@ -164,8 +164,7 @@ def logout() -> str:
 def dashboard() -> str:
     """User dashboard."""
     user = User.query.get(session.get("user_id"))
-    workspaces = user.workspaces if user else []
-    return render_template("dashboard.html", user=user, workspaces=workspaces)
+    return render_template("dashboard.html", user=user)
 
 
 # --- OAuth2 routes ---

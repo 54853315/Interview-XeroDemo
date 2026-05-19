@@ -1,0 +1,38 @@
+{% extends "base.html" %} {% block title %}Home - XeroDemo{% endblock %} {%
+block content %}
+<div style="text-align: center; padding: 60px 20px">
+  <h2 style="font-size: 36px; margin-bottom: 20px">Welcome to XeroDemo</h2>
+  <p style="font-size: 18px; color: #666; margin-bottom: 40px">
+    Connect with Xero and manage your invoices efficiently.
+  </p>
+
+  {% if session.get('user_id') %}
+  <a
+    href="{{ url_for('app.dashboard') }}"
+    class="btn"
+    style="font-size: 16px; padding: 12px 30px"
+  >
+    Go to Dashboard
+  </a>
+  {% else %}
+  <div
+    style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap"
+  >
+    <a
+      href="{{ url_for('auth.xero_start') }}"
+      class="btn xero-btn"
+      style="font-size: 16px; padding: 12px 30px"
+    >
+      Sign in with Xero
+    </a>
+    <a
+      href="{{ url_for('app.signup') }}"
+      class="btn"
+      style="font-size: 16px; padding: 12px 30px"
+    >
+      Create Account
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

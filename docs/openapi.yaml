@@ -1,0 +1,375 @@
+openapi: 3.0.3
+info:
+  title: XeroDemo API
+  description: |
+    XeroDemo 是一个集成 Xero OAuth2 的发票管理演示应用。
+    支持邮箱密码注册/登录、Xero OAuth2 授权、Workspace 同步等功能。
+  version: 0.1.0
+  contact:
+    name: XeroDemo
+
+servers:
+  - url: http://localhost:5000
+    description: 本地开发环境
+
+tags:
+  - name: 页面
+    description: 返回 HTML 页面的路由
+  - name: 认证
+    description: 用户注册、登录、登出
+  - name: OAuth2
+    description: Xero OAuth2 授权流程
+
+paths:
+  /:
+    get:
+      tags: [页面]
+      summary: 首页
+      description: 显示欢迎页面，已登录用户显示 Dashboard 链接，未登录显示登录/注册按钮。
+      responses:
+        "200":
+          description: 首页 HTML
+
+  /login:
+    get:
+      tags: [认证]
+      summary: 登录页面
+      description: 显示邮箱密码登录表单和 "Sign in with Xero" 按钮。
+      responses:
+        "200":
+          description: 登录页面 HTML
+    post:
+      tags: [认证]
+      summary: 提交登录
+      description: |
+        邮箱密码登录。登录成功后：
+        - 如果 session 中有 pending_token_key，自动绑定 Xero OAuth token
+        - 如果 session 中有 pending_connections，自动同步 Workspace
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: 用户邮箱
+                password:
+                  type: string
+                  format: password
+                  description: 用户密码
+      responses:
+        "302":
+          description: 登录成功重定向到 Dashboard
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /dashboard
+        "200":
+          description: 登录失败，显示错误信息
+
+  /signup:
+    get:
+      tags: [认证]
+      summary: 注册页面
+      description: |
+        显示注册表单。如果从 Xero OAuth 回调跳转，表单会预填 Xero 返回的邮箱和姓名。
+      responses:
+        "200":
+          description: 注册页面 HTML
+    post:
+      tags: [认证]
+      summary: 提交注册
+      description: |
+        创建新用户。注册成功后：
+        - 如果 session 中有 pending_token_key，自动绑定 Xero OAuth token
+        - 如果 session 中有 pending_connections，自动同步 Workspace
+        - 用户信息中包含 xero_id 和 xero_tenant_id（来自 OAuth 预填）
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: 用户邮箱
+                first_name:
+                  type: string
+                  description: 名
+                last_name:
+                  type: string
+                  description: 姓
+                password:
+                  type: string
+                  format: password
+                  description: |
+                    用户密码。要求：
+                    - 至少 8 位字符
+                    - 必须包含字母（不限大小写）
+                    - 必须包含数字
+      responses:
+        "302":
+          description: 注册成功重定向到 Dashboard
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /dashboard
+        "200":
+          description: 注册失败（密码不合要求或邮箱已注册）
+
+  /logout:
+    get:
+      tags: [认证]
+      summary: 登出
+      description: |
+        清除用户登录状态：
+        1. 删除该用户所有 OAuthToken 记录
+        2. 清除 session
+        3. 重定向到首页
+      responses:
+        "302":
+          description: 登出成功重定向到首页
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /
+
+  /dashboard:
+    get:
+      tags: [页面]
+      summary: 用户仪表板
+      description: |
+        显示用户信息、Xero 连接状态和 Workspace 列表。需要登录。
+        未登录用户会被重定向到 /login。
+      responses:
+        "200":
+          description: 仪表板 HTML
+        "302":
+          description: 未登录，重定向到登录页
+
+  /auth/xero/start:
+    get:
+      tags: [OAuth2]
+      summary: 发起 Xero OAuth2 授权
+      description: |
+        启动 Xero OAuth2 授权流程：
+        1. 生成随机 state 参数（`secrets.token_urlsafe(32)`）
+        2. 将 state 存入 session（`oauth_state`）
+        3. 重定向到 Xero 授权页面
+      responses:
+        "302":
+          description: 重定向到 Xero 授权页面
+          headers:
+            Location:
+              schema:
+                type: string
+                example: https://login.xero.com/identity/connect/authorize?...
+
+  /auth/xero/callback:
+    get:
+      tags: [OAuth2]
+      summary: Xero OAuth2 回调
+      description: |
+        处理 Xero OAuth2 授权回调，完整流程：
+
+        1. **State 校验**：使用 `hmac.compare_digest` 时序安全比较 state 参数，
+           校验后立即从 session 中移除（`session.pop`），防止重放攻击
+        2. **Token 交换**：用 authorization code 换取 access_token
+        3. **获取 Organization 列表**：调用 Xero Connections API 获取用户有权限的 organization
+           （失败时不影响登录，仅不创建 Workspace 记录）
+        4. **解析 ID Token**：从 JWT 中提取用户邮箱、姓名等信息
+        5. **已有用户**：更新 xero_id/xero_tenant_id，保存 OAuthToken 到数据库，同步 Workspace
+        6. **新用户**：将 token 存为 pending 记录（user_id=NULL，session_key 关联），
+           connections 数据序列化为 JSON 存入 session，重定向到注册页面
+
+        安全要点：
+        - access_token / refresh_token 仅存于服务端 SQLite，不写入 Flask session
+        - 新用户通过 session_key（随机字符串）关联 pending token
+        - client_secret 仅在服务端 token exchange 时使用
+      parameters:
+        - name: code
+          in: query
+          required: false
+          description: Xero 返回的授权码
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          description: CSRF 防护的 state 参数，需与 session 中的 oauth_state 匹配
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          description: Xero 返回的错误码（用户拒绝授权等）
+          schema:
+            type: string
+        - name: session_state
+          in: query
+          required: false
+          description: Xero 返回的会话状态标识
+          schema:
+            type: string
+      responses:
+        "302":
+          description: |
+            重定向目标取决于场景：
+            - 已有用户 → /dashboard
+            - 新用户 → /signup（带 Xero 信息预填）
+            - 错误 → /（显示错误信息）
+
+components:
+  schemas:
+    User:
+      type: object
+      description: 用户账户
+      properties:
+        id:
+          type: integer
+          description: 用户 ID
+        email:
+          type: string
+          format: email
+          description: 用户邮箱（唯一）
+        first_name:
+          type: string
+          description: 名
+        last_name:
+          type: string
+          description: 姓
+        xero_id:
+          type: string
+          nullable: true
+          description: Xero 用户唯一标识（来自 ID Token 的 sub 字段）
+        xero_tenant_id:
+          type: string
+          nullable: true
+          description: 用户首选 Xero tenant ID（来自 Connections API 第一个 organization）
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Workspace:
+      type: object
+      description: Xero Organization/Tenant 对应的工作区
+      properties:
+        id:
+          type: integer
+          description: Workspace ID
+        user_id:
+          type: integer
+          description: 所属用户 ID
+        name:
+          type: string
+          description: Organization 名称（来自 Xero Connections API 的 tenantName）
+        xero_tenant_id:
+          type: string
+          nullable: true
+          description: Xero Tenant ID（唯一，来自 Connections API）
+        trial_account:
+          type: boolean
+          description: 是否为试用账户
+          default: false
+        created_at:
+          type: string
+          format: date-time
+
+    OAuthToken:
+      type: object
+      description: |
+        OAuth2 Token 持久化记录。
+
+        - user_id 为 NULL 时表示 pending token（新用户注册前的临时状态）
+        - session_key 用于关联 pending token 和 session，注册后清空
+        - 所有 token 数据仅存于服务端，不返回前端
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+          nullable: true
+          description: 关联用户 ID，pending 状态时为 NULL
+        session_key:
+          type: string
+          nullable: true
+          description: pending token 的临时关联键，绑定用户后清空
+        access_token:
+          type: string
+          description: Xero access token（JWT 格式）
+        refresh_token:
+          type: string
+          nullable: true
+          description: Xero refresh token，用于自动续期
+        token_type:
+          type: string
+          default: Bearer
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: access_token 过期时间
+        scope:
+          type: string
+          nullable: true
+          description: 授权 scope
+        tenant_id:
+          type: string
+          nullable: true
+          description: 用户首选 Xero tenant ID
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    XeroConnection:
+      type: object
+      description: Xero Connections API 返回的 organization 信息
+      properties:
+        id:
+          type: string
+          description: Connection ID
+        tenantId:
+          type: string
+          description: Organization 的 Tenant ID
+        tenantType:
+          type: string
+          description: Tenant 类型
+          example: ORGANISATION
+        tenantName:
+          type: string
+          description: Organization 名称
+          example: Demo Company
+        createdDateUtc:
+          type: string
+          format: date-time
+        updatedDateUtc:
+          type: string
+          format: date-time
+
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: |
+        Flask signed session cookie。登录后 cookie 中包含 user_id 和 email，
+        不包含任何 OAuth token 数据。
+
+security:
+  - cookieAuth: []

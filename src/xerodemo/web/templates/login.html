@@ -1,0 +1,29 @@
+{% extends "base.html" %} {% block title %}Login - XeroDemo{% endblock %} {%
+block content %}
+<div style="max-width: 400px; margin: 60px auto">
+  <h2 style="margin-bottom: 30px">Login</h2>
+
+  <form method="post">
+    <label for="email">Email:</label>
+    <input type="email" id="email" name="email" required />
+
+    <label for="password">Password:</label>
+    <input type="password" id="password" name="password" required />
+
+    <button type="submit" class="btn" style="width: 100%; margin-bottom: 20px">
+      Login
+    </button>
+  </form>
+
+  <div style="text-align: center; margin-top: 20px">
+    <p>
+      Don't have an account? <a href="{{ url_for('app.signup') }}">Sign up</a>
+    </p>
+    <p style="margin-top: 15px">
+      <a href="{{ url_for('auth.xero_start') }}" class="btn xero-btn"
+        >Sign in with Xero</a
+      >
+    </p>
+  </div>
+</div>
+{% endblock %}
